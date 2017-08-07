@@ -3,6 +3,7 @@ package selfie
 import (
 	"bytes"
 	"crypto"
+	"crypto/hmac"
 	cry "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -129,7 +130,7 @@ func (s *SSHKey) signPublicKeyWith(priv *rsa.PrivateKey) (*Selfie, error) {
 		return nil, err
 	}
 	sig := &ssh.Signature{
-		Format: "sha256",
+		Format: "rsa-sha256",
 		Blob:   blob,
 	}
 	s.Signature = sig
@@ -147,7 +148,6 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 	// reserialize the payload field SignMe
 
 	mm, err := selfie.SignMe.MarshalMsg(nil)
-	_ = mm
 	panicOn(err)
 
 	// ParseAuthorizedKeys parses a public
@@ -158,12 +158,6 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 	if err != nil {
 		return false, err
 	}
-
-	sig := &ssh.Signature{
-		Format: selfie.SignatureFormat,
-		Blob:   selfie.SignatureBlob,
-	}
-	_ = sig
 
 	err = VerifySHA256(pubkey, mm, selfie.SignatureBlob)
 	if err != nil {
@@ -183,18 +177,24 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 	return true, nil
 }
 
-// Sign signs data with rsa-sha256
-func SignSHA256(priv *rsa.PrivateKey, data []byte) ([]byte, error) {
+// SignSHA256 signs data with rsa-sha256
+func SignSHA256(rsapriv *rsa.PrivateKey, data []byte) ([]byte, error) {
 	h := sha256.New()
 	h.Write(data)
 	d := h.Sum(nil)
-	return rsa.SignPKCS1v15(cry.Reader, priv, crypto.SHA256, d)
+	return rsa.SignPKCS1v15(cry.Reader, rsapriv, crypto.SHA256, d)
 }
 
-// Unsign verifies the message using a rsa-sha256 signature
-func VerifySHA256(r *rsa.PublicKey, message []byte, sig []byte) error {
+// VerifySHA256 verifies the message using a rsa-sha256 signature
+func VerifySHA256(rsapub *rsa.PublicKey, message []byte, sig []byte) error {
 	h := sha256.New()
 	h.Write(message)
 	d := h.Sum(nil)
-	return rsa.VerifyPKCS1v15(r, crypto.SHA256, d, sig)
+	return rsa.VerifyPKCS1v15(rsapub, crypto.SHA256, d, sig)
+}
+
+func HmacSha256(sharedSecret, data []byte) []byte {
+	h := hmac.New(sha256.New, sharedSecret)
+	h.Write(data)
+	return h.Sum(nil)
 }

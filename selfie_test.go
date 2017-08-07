@@ -34,9 +34,6 @@ func Test002NonSelfSignedKeysInvalid(t *testing.T) {
 		storeToFile := ""
 		bits := 1024
 		email := "example@example.com"
-		//		priv0, _, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
-		//		_ = priv0
-		//		panicOn(err)
 
 		priv1, _, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
 		panicOn(err)
@@ -60,7 +57,7 @@ func Test003JSONserializationOfSelfie(t *testing.T) {
 
 		s1 := NewTestSelfie("example@example.com")
 		s2 := NewTestSelfie("dos@example.com")
-		s1.SignMe.Others = append(s1.SignMe.Others, s2)
+		s1.SignMe.Others = []*Selfie{s2}
 
 		fmt.Printf("\n ----> json of selfie: '%s'\n", s1.JSON())
 	})
@@ -69,7 +66,13 @@ func Test003JSONserializationOfSelfie(t *testing.T) {
 func NewTestSelfie(email string) *Selfie {
 
 	storeToFile := ""
+
+	// speed up tests, use fewer bits
 	bits := 1024
+
+	// for production, use
+	//bits := 4096
+
 	key, err := NewSSHKey(email, bits, storeToFile)
 	panicOn(err)
 
