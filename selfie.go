@@ -49,6 +49,9 @@ type SignedStuff struct {
 	// SignedAtTimestamp states when
 	// the signature occured.
 	SignedAtTimestamp time.Time `zid:"1"`
+
+	// Others we vouch for.
+	Others []*Selfie `zid:"2"`
 }
 
 // Selfie is a self-signed public key.
@@ -60,9 +63,6 @@ type Selfie struct {
 	// ssh.Signature struct.
 	SignatureFormat string `zid:"1"`
 	SignatureBlob   []byte `zid:"2"`
-
-	// Others we vouch for.
-	Others []*Selfie `zid:"3"`
 }
 
 func (s *Selfie) JSON() string {
@@ -136,8 +136,7 @@ func (s *SSHKey) signPublicKeyWith(priv ssh.Signer) (*Selfie, error) {
 
 func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 
-	// reinflate the public key
-	// and timestamp
+	// reserialize the payload field SignMe
 
 	mm, err := selfie.SignMe.MarshalMsg(nil)
 	panicOn(err)
@@ -147,7 +146,6 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 	// file used in OpenSSH according
 	// to the sshd(8) manual page.
 	pubkey, err := ssh.ParsePublicKey(selfie.SignMe.PubKeyBytes)
-	panicOn(err)
 	if err != nil {
 		return false, err
 	}
@@ -167,7 +165,7 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 	}
 
 	// recursively validate
-	for i, o := range selfie.Others {
+	for i, o := range selfie.SignMe.Others {
 		ov, err := ValidateSelfSignedKey(o)
 		if err != nil {
 			return false, err
