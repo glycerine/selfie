@@ -3,6 +3,7 @@ package selfie
 import (
 	"bytes"
 	cry "crypto/rand"
+	"fmt"
 	"github.com/glycerine/greenpack/msgp"
 	"github.com/glycerine/sshego"
 	"golang.org/x/crypto/ssh"
@@ -59,6 +60,9 @@ type Selfie struct {
 	// ssh.Signature struct.
 	SignatureFormat string `zid:"1"`
 	SignatureBlob   []byte `zid:"2"`
+
+	// Others we vouch for.
+	Others []*Selfie `zid:"3"`
 }
 
 func (s *Selfie) JSON() string {
@@ -161,5 +165,17 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 	if err != nil {
 		return false, err
 	}
+
+	// recursively validate
+	for i, o := range selfie.Others {
+		ov, err := ValidateSelfSignedKey(o)
+		if err != nil {
+			return false, err
+		}
+		if !ov {
+			return false, fmt.Errorf("the i-th other was invalid", i)
+		}
+	}
+
 	return true, nil
 }
