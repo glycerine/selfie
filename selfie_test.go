@@ -34,17 +34,18 @@ func Test002NonSelfSignedKeysInvalid(t *testing.T) {
 		storeToFile := ""
 		bits := 1024
 		email := "example@example.com"
-		_, signer0, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
+		//		priv0, _, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
+		//		_ = priv0
+		//		panicOn(err)
+
+		priv1, _, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
 		panicOn(err)
 
-		_, signer1, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
+		key, err := NewSSHKey(email, bits, storeToFile)
 		panicOn(err)
-
-		key := NewSSHKey()
-		key.LoadPriv(signer0, "")
 
 		// sign with a different key than our own.
-		selfie, err := key.signPublicKeyWith(signer1)
+		selfie, err := key.signPublicKeyWith(priv1)
 		panicOn(err)
 
 		valid, err := ValidateSelfSignedKey(selfie)
@@ -69,11 +70,8 @@ func NewTestSelfie(email string) *Selfie {
 
 	storeToFile := ""
 	bits := 1024
-	_, signer, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
+	key, err := NewSSHKey(email, bits, storeToFile)
 	panicOn(err)
-
-	key := NewSSHKey()
-	key.LoadPriv(signer, "")
 
 	selfie, err := key.SelfSignKey()
 	panicOn(err)

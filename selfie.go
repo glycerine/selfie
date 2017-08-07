@@ -2,7 +2,10 @@ package selfie
 
 import (
 	"bytes"
+	"crypto"
 	cry "crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"fmt"
 	"github.com/glycerine/greenpack/msgp"
 	"github.com/glycerine/sshego"
@@ -31,13 +34,33 @@ type SSHKey struct {
 	PubKey      ssh.PublicKey
 	PubKeyBytes []byte
 
+	RsaPriv *rsa.PrivateKey
+	RsaPub  *rsa.PublicKey
+
 	Signature *ssh.Signature
 
 	Selfie *Selfie
+	Bits   int
+	Email  string
 }
 
-func NewSSHKey() *SSHKey {
-	return &SSHKey{}
+func NewSSHKey(email string, bits int, storeToFile string) (*SSHKey, error) {
+	key := &SSHKey{
+		Email:       email,
+		Bits:        bits,
+		PrivKeyPath: storeToFile,
+	}
+	rsaPriv, signer, err := sshego.GenRSAKeyPair(storeToFile, bits, email)
+	if err != nil {
+		return nil, err
+	}
+	key.PrivKey = signer
+	key.RsaPriv = rsaPriv
+
+	key.PubKey = key.PrivKey.PublicKey()
+	key.RsaPub = &key.RsaPriv.PublicKey
+
+	return key, nil
 }
 
 type SignedStuff struct {
@@ -75,33 +98,14 @@ func (s *Selfie) JSON() string {
 	return out.String()
 }
 
-// ReadKey will replace s.PrivKey and s.PrivKeyPath
-// with a key loaded from path
-func (s *SSHKey) ReadKey(path string) error {
-	priv, err := sshego.LoadRSAPrivateKey(path)
-	if err != nil {
-		return err
-	}
-	return s.LoadPriv(priv, path)
-}
-
-func (s *SSHKey) LoadPriv(priv ssh.Signer, path string) error {
-	s.PrivKey = priv
-	s.PrivKeyPath = path
-
-	pub := s.PrivKey.PublicKey()
-	s.PubKey = pub
-	return nil
-}
-
 // SelfSignKey requires s.PrivKey and
 // s.PubKey to be established
 // already upon entry.
 func (s *SSHKey) SelfSignKey() (*Selfie, error) {
-	return s.signPublicKeyWith(s.PrivKey)
+	return s.signPublicKeyWith(s.RsaPriv)
 }
 
-func (s *SSHKey) signPublicKeyWith(priv ssh.Signer) (*Selfie, error) {
+func (s *SSHKey) signPublicKeyWith(priv *rsa.PrivateKey) (*Selfie, error) {
 
 	// Marshal returns the serialized
 	// key data in SSH wire format,
@@ -120,9 +124,13 @@ func (s *SSHKey) signPublicKeyWith(priv ssh.Signer) (*Selfie, error) {
 	mm, err := signme.MarshalMsg(nil)
 	panicOn(err)
 
-	sig, err := priv.Sign(cry.Reader, mm)
+	blob, err := SignSHA256(priv, mm)
 	if err != nil {
 		return nil, err
+	}
+	sig := &ssh.Signature{
+		Format: "sha256",
+		Blob:   blob,
 	}
 	s.Signature = sig
 	selfie := &Selfie{
@@ -139,13 +147,14 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 	// reserialize the payload field SignMe
 
 	mm, err := selfie.SignMe.MarshalMsg(nil)
+	_ = mm
 	panicOn(err)
 
 	// ParseAuthorizedKeys parses a public
 	// key from an authorized_keys
 	// file used in OpenSSH according
 	// to the sshd(8) manual page.
-	pubkey, err := ssh.ParsePublicKey(selfie.SignMe.PubKeyBytes)
+	pubkey, err := SshParseRsaPublicKey(selfie.SignMe.PubKeyBytes)
 	if err != nil {
 		return false, err
 	}
@@ -154,12 +163,9 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 		Format: selfie.SignatureFormat,
 		Blob:   selfie.SignatureBlob,
 	}
+	_ = sig
 
-	// Verify that sig is a signature on
-	// the given data using this
-	// key. This function will hash the
-	// data appropriately first.
-	err = pubkey.Verify(mm, sig)
+	err = VerifySHA256(pubkey, mm, selfie.SignatureBlob)
 	if err != nil {
 		return false, err
 	}
@@ -174,6 +180,21 @@ func ValidateSelfSignedKey(selfie *Selfie) (valid bool, err error) {
 			return false, fmt.Errorf("the i-th other was invalid", i)
 		}
 	}
-
 	return true, nil
+}
+
+// Sign signs data with rsa-sha256
+func SignSHA256(priv *rsa.PrivateKey, data []byte) ([]byte, error) {
+	h := sha256.New()
+	h.Write(data)
+	d := h.Sum(nil)
+	return rsa.SignPKCS1v15(cry.Reader, priv, crypto.SHA256, d)
+}
+
+// Unsign verifies the message using a rsa-sha256 signature
+func VerifySHA256(r *rsa.PublicKey, message []byte, sig []byte) error {
+	h := sha256.New()
+	h.Write(message)
+	d := h.Sum(nil)
+	return rsa.VerifyPKCS1v15(r, crypto.SHA256, d, sig)
 }
