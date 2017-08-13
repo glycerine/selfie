@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"golang.org/x/crypto/ssh"
+	"github.com/glycerine/sshego/xendor/github.com/glycerine/xcryptossh"
 	"math/big"
 )
 

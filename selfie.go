@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"github.com/glycerine/greenpack/msgp"
 	"github.com/glycerine/sshego"
-	"golang.org/x/crypto/ssh"
+	"github.com/glycerine/sshego/xendor/github.com/glycerine/xcryptossh"
 	"time"
 )
 
